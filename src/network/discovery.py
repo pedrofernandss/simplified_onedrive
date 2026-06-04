@@ -39,6 +39,21 @@ class DiscoveryService:
             except Exception as e:
                 pass
 
+    def check_timeouts(self):
+        while self.running:
+            now = time.time()
+            unplugged_nodes = []
+
+            for peer_id, info in self.peers.items():
+                if (now - info["last_seen"]) > self.timeout:
+                    unplugged_nodes.append(peer_id)
+
+            for peer_id in unplugged_nodes:
+                del self.peers[peer_id]
+                print(f"[{self.node_id}] [-] Nó desconectado: {peer_id}")
+
+            time.sleep(2)
+
     def broadcast(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -58,3 +73,4 @@ class DiscoveryService:
     def start(self):
         threading.Thread(target=self.listen_for_peers, daemon=True).start() # Thread para ouvir
         threading.Thread(target=self.broadcast, daemon=True).start() # Thread para falar
+        threading.Thread(target=self.check_timeouts, daemon=True).start()  # Thread para vigiar desconexão (timeout)
