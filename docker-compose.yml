@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  node_a:
+    build: .
+    container_name: peer_node_a
+    volumes:
+      - ./documents/documents_node_a:/app/documents
+      - ./src:/app/src
+    environment:
+      - NODE_ID=node_a
+      - SYNC_DIR=/app/documents
+    command: ["python", "src/main.py", "node_a"]
+    networks:
+      - lan_p2p
+
+  node_b:
+    build: .
+    container_name: peer_node_b
+    volumes:
+      - ./documents/documents_node_b:/app/documents
+      - ./src:/app/src
+    environment:
+      - NODE_ID=node_b
+      - SYNC_DIR=/app/documents
+    command: ["python", "src/main.py", "node_b"]
+    networks:
+      - lan_p2p
+
+  node_c:
+    build: .
+    container_name: peer_node_c
+    volumes:
+      - ./documents/documents_node_c:/app/documents
+      - ./src:/app/src
+    environment:
+      - NODE_ID=node_b
+      - SYNC_DIR=/app/documents
+    command: [ "python", "src/main.py", "node_c" ]
+    networks:
+      - lan_p2p
+
+  node_d:
+    build: .
+    container_name: peer_node_d
+    volumes:
+      - ./documents/documents_node_d:/app/documents
+      - ./src:/app/src
+    environment:
+      - NODE_ID=node_b
+      - SYNC_DIR=/app/documents
+    command: [ "python", "src/main.py", "node_d" ]
+    networks:
+      - lan_p2p
+
+networks:
+  lan_p2p:
+    driver: bridge
