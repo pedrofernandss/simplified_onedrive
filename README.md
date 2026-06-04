@@ -4,8 +4,6 @@ Este projeto consiste em um sistema de sincronização de arquivos distribuído,
 
 O sistema foi construído como estudo de caso para a disciplina de Redes de Computadores, aplicando de forma prática conceitos de comunicação em rede com a construção de Socket's.
 
----
-
 ## 1. Visão Geral do Sistema
 
 O Mini-OneDrive emula o comportamento de plataformas modernas de armazenamento em nuvem, substituindo a tradicional arquitetura Cliente-Servidor por uma rede 100% descentralizada. A topologia permite que qualquer nó integre ou abandone a rede de forma dinâmica, garantindo que a sincronização dos dados entre os pares ocorra de forma autônoma.
@@ -18,8 +16,6 @@ O Mini-OneDrive emula o comportamento de plataformas modernas de armazenamento e
 * **Resolução de Conflitos (Relógios Vetoriais - Em desenvolvimento):** Implementação de controle de causalidade para gerenciar edições simultâneas *offline*, prevenindo a perda de dados através da criação de versões de conflito.
 * **Sincronização Delta (TCP - Em desenvolvimento):** Protocolo de transferência otimizada de dados, baseado na segmentação de arquivos (*chunks*) e na verificação de integridade através de algoritmos de *hash* (SHA-256).
 
----
-
 ## 2. Tecnologias Utilizadas
 
 A arquitetura do projeto priorizou a minimização de dependências externas, recorrendo exclusivamente aos recursos nativos da linguagem para a lógica principal:
@@ -27,8 +23,6 @@ A arquitetura do projeto priorizou a minimização de dependências externas, re
 * **Linguagem de Programação:** Python 3.11 (Uso das bibliotecas padrão: `socket`, `threading`, `json`, `hashlib`, `os`).
 * **Ambiente e Virtualização:** Docker e Docker Compose.
 * **Protocolos de Comunicação:** UDP (Gestão de topologia e descoberta) e TCP (Transferência confiável de dados).
-
----
 
 ## 3. Estrutura do Projeto
 
@@ -48,8 +42,7 @@ simplified_onedrive/
     │   └── node.py         # Classe principal (Composição de serviços do Nó)
     └── network/
         └── discovery.py    # Implementação do protocolo de descoberta P2P
-
----
+```
 
 ## 4. Instruções de Execução
 
