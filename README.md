@@ -35,13 +35,13 @@ A arquitetura do projeto priorizou a minimização de dependências externas, re
 A organização dos diretórios reflete a separação entre a infraestrutura de execução, os dados persistentes e a lógica de domínio:
 
 ```text
-mini-onedrive/
+simplified_onedrive/
 ├── docker-compose.yml      # Configuração da orquestração dos contêineres
 ├── Dockerfile              # Definição da imagem base da aplicação
 ├── documents/              # Diretórios locais mapeados para sincronização
-│   ├── node_a_dir/
-│   ├── node_b_dir/
-│   └── node_c_dir/
+│   ├── documents_node_a/
+│   ├── documents_node_b/
+│   └── documents_node_c/
 └── src/
     ├── main.py             # Ponto de entrada da aplicação
     ├── core/
