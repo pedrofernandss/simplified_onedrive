@@ -34,7 +34,7 @@ services:
       - ./documents/documents_node_c:/app/documents
       - ./src:/app/src
     environment:
-      - NODE_ID=node_b
+      - NODE_ID=node_c
       - SYNC_DIR=/app/documents
     command: [ "python", "src/main.py", "node_c" ]
     networks:
@@ -47,7 +47,7 @@ services:
       - ./documents/documents_node_d:/app/documents
       - ./src:/app/src
     environment:
-      - NODE_ID=node_b
+      - NODE_ID=node_d
       - SYNC_DIR=/app/documents
     command: [ "python", "src/main.py", "node_d" ]
     networks:
