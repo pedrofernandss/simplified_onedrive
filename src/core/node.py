@@ -1,3 +1,4 @@
+from core.file_monitor import FileMonitor
 from network.discovery import DiscoveryService
 
 class Node:
@@ -6,12 +7,15 @@ class Node:
         self.sync_dir = sync_dir
 
         self.discovery = DiscoveryService(self.node_id)
+        self.monitor = FileMonitor(self.sync_dir, self.node_id)
 
     def start(self):
         self.discovery.start()
+        self.monitor.start()
 
         print(f"[{self.node_id}] Nó operacional. Aguardando eventos...\n")
 
     def stop(self):
         print(f"\n[{self.node_id}] Encerrando atividades do Nó...")
         self.discovery.running = False
+        self.monitor.running = False
