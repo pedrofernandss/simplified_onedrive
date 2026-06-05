@@ -13,4 +13,14 @@ class FileMonitor:
         if not os.path.exists(self.sync_dir):
             os.makedirs(self.sync_dir)
 
+    def get_file_hash(self, filepath):
+        sha256_hash = hashlib.sha256()
+
+        try:
+            with open(filepath, "rb") as file:
+                for byte_block in iter(lambda: file.read(65536), b""):
+                    sha256_hash.update(byte_block)
+            return sha256_hash.hexdigest()
+        except FileNotFoundError:
+            return None
 
