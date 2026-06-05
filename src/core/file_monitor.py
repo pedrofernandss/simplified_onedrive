@@ -60,3 +60,11 @@ class FileMonitor:
                     now = time.time()
                     self.files_state[relative_path]['updated_at'] = now
                     print(f"Arquivo {relative_path} pelo [{self.node_id}]")
+
+    def loop(self) -> None:
+        while self.running:
+            self.scan_directory()
+            time.sleep(2)
+
+    def start(self) -> None:
+        threading.Thread(target=self.loop, daemon=True).start()
