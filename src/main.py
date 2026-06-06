@@ -6,7 +6,7 @@ if __name__ == "__main__":
     node_id = os.environ.get("NODE_ID", "No_Desconhecido")
     sync_dir = os.environ.get("SYNC_DIR", "/app/documents")
 
-    node = Node(node_id, sync_dir)
+    node = Node(sync_dir, node_id)
 
     node.start()
 
