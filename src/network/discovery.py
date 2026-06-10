@@ -10,6 +10,7 @@ class DiscoveryService:
         self.peers = {}
         self.timeout = 5
         self.running = True
+        self.on_new_peer = None 
 
     def listen_for_peers(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -26,15 +27,18 @@ class DiscoveryService:
 
                 if peer_id and (peer_id != self.node_id):
                     now = time.time()
+                    is_new = peer_id not in self.peers
 
-                    if peer_id not in self.peers:
-                        self.peers[peer_id] = addr[0]
+                    if is_new:
                         print(f"[{self.node_id}] [+] Novo nó descoberto: {peer_id} no IP {addr[0]}")
 
                     self.peers[peer_id] = {
                         "ip": addr[0],
                         "last_seen": now
                     }
+
+                    if is_new and self.on_new_peer:
+                        self.on_new_peer(peer_id, addr[0])
 
             except Exception as e:
                 pass
