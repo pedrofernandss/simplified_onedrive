@@ -36,6 +36,9 @@ class FileMonitor:
 
         for root, _, files in os.walk(self.sync_dir):
             for file in files:
+                if file.startswith('.') or file.endswith('.swp') or file.endswith('~'):
+                    continue
+
                 filepath = os.path.join(root, file)
                 relative_path = os.path.relpath(filepath, self.sync_dir)
                 current_files.add(relative_path)
