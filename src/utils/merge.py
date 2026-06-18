@@ -39,12 +39,3 @@ def create_merge_conflits_marks(local_content: str, remote_content: str) -> str:
         marks.append(">>>>>>> ALTERAÇÕES REMOTAS DA REDE")
 
     return "\n".join(marks)
-
-def force_resolution(filepath: str):
-    print(f"\n[AVISO] Conflito detectado no arquivo! Abrindo editor para resolução.")
-    print("Instruções: Remova as linhas com <<<<<<<, =======, >>>>>>> e salve o texto correto.")
-    input("Aperte ENTER para abrir o editor.")
-
-    subprocess.call(["nano", filepath])
-
-    print("[+] Conflito resolvido pelo usuário! Prosseguindo com a sincronização.")
