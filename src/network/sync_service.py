@@ -5,14 +5,9 @@ import socket
 import hashlib
 import threading
 
+from utils.merge import create_merge_conflits_marks
 
 class SyncService:
-    """Serviço de sincronização de arquivos via TCP.
-
-    - Servidor TCP (porta 8888): responde pedidos LIST e GET de outros nós.
-    - Cliente TCP: conecta em peers para listar e baixar arquivos ausentes.
-    """
-
     def __init__(self, sync_dir: str, node_id: str):
         self.sync_dir = sync_dir
         self.node_id = node_id
@@ -115,6 +110,38 @@ class SyncService:
                         "action": "error",
                         "message": f"Arquivo não encontrado: {filename}"
                     })
+
+            elif action == "push":
+                filename = header.get("filename")
+                file_size = header.get("size")
+                expected_hash = header.get("hash")
+
+                content = self._recv_exactly(conn, file_size)
+
+                if content:
+                    filepath = os.path.join(self.sync_dir, filename)
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    remote_content = content.decode('utf-8', errors='ignore')
+
+                    if os.path.exists(filepath):
+                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                            local_content = f.read()
+
+                        hash_local = hashlib.sha256(local_content.encode('utf-8')).hexdigest()
+
+                        if hash_local != expected_hash:
+                            print(f"[{self.node_id}] Atenção! Os arquivos '{filename}' estão em conflito!")
+                            merged_text = create_merge_conflits_marks(local_content, remote_content)
+
+                            with open(filepath, "w", encoding="utf-8") as f:
+                                f.write(merged_text)
+
+                            print(f"[{self.node_id}] Marcas de conflito inseridas em '{filename}'.")
+                            return
+
+                    with open(filepath, "wb") as f:
+                        f.write(content)
+                    print(f"[{self.node_id}] - Arquivo {filename} atualizado com sucesso.")
 
         except Exception as e:
             print(f"[{self.node_id}] Erro ao atender conexão de {addr}: {e}")
@@ -219,6 +246,34 @@ class SyncService:
 
         except Exception as e:
             print(f"[{self.node_id}] Erro ao baixar {filename}: {e}")
+
+    def spread_modifications(self, peer_ip: str, filename: str) -> None:
+        try:
+            filepath = os.path.join(self.sync_dir, filename)
+
+            with open(filepath, "rb") as f:
+                content = f.read()
+
+            file_hash = self._get_file_hash(filepath)
+            file_size = len(content)
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((peer_ip, self.tcp_port))
+
+            header = {
+                "action": "push",
+                "filename": filename,
+                "hash": file_hash,
+                "size": file_size,
+                "node_id": self.node_id
+            }
+
+            self._send_message(sock, header, content)
+            sock.close()
+            print(f"[{self.node_id}] - Arquivo '{filename}' enviado com sucesso para o IP {peer_ip}")
+
+        except Exception as e:
+            print(f"[{self.node_id}] Falha ao enviar '{filename}' para {peer_ip}: {e}")
 
     def start(self) -> None:
         threading.Thread(target=self._tcp_server, daemon=True).start()
