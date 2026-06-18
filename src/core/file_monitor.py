@@ -16,6 +16,7 @@ class FileMonitor:
         self.node_id = node_id
         self.files_state = {}
         self.running = True
+        self.on_file_changed = None
 
         if not os.path.exists(self.sync_dir):
             os.makedirs(self.sync_dir)
@@ -55,6 +56,9 @@ class FileMonitor:
                     }
 
                     print(f"ATENÇÃO! O arquivo {relative_path} foi detectado/alterado pelo [{self.node_id}]")
+
+                    if self.on_file_changed:
+                        self.on_file_changed(relative_path)
 
             for relative_path in list(self.files_state.keys()):
                 if relative_path not in current_files and not self.files_state[relative_path]['deleted']:

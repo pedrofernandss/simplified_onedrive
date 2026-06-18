@@ -12,14 +12,29 @@ class Node:
         self.discovery = DiscoveryService(self.node_id)
         self.monitor = FileMonitor(self.sync_dir, self.node_id)
         self.sync_service = SyncService(self.sync_dir, self.node_id)
-        self.discovery.on_new_peer = self._on_peer_discovered
+        self.discovery.has_new_peer = self._on_peer_discovered
+        self.monitor.on_file_changed = self._on_file_changed
 
     def _on_peer_discovered(self, peer_id: str, peer_ip: str) -> None:
-        def sync_after_delay():
-            time.sleep(1)
-            self.sync_service.sync_with_peer(peer_id, peer_ip)
+        time.sleep(1)
+        self.sync_service.sync_with_peer(peer_id, peer_ip)
 
-        threading.Thread(target=sync_after_delay, daemon=True).start()
+    def _on_file_changed(self, filename: str) -> None:
+        print(f"[{self.node_id}] _on_file_changed disparado para o arquivo: {filename}")
+
+        peers_descobertos = self.discovery.peers
+        print(
+            f"[{self.node_id}] Peers conhecidos no momento do envio: {list(peers_descobertos.keys())}")  # <--- ADICIONE ESTE PRINT
+
+        for peer_id, info in peers_descobertos.items():
+            peer_ip = info["ip"]
+            print(f"[{self.node_id}] Enviando para {peer_id} no IP {peer_ip}")  # <--- ADICIONE ESTE PRINT
+
+            threading.Thread(
+                target=self.sync_service.spread_modifications,
+                args=(peer_ip, filename),
+                daemon=True
+            ).start()
 
     def start(self) -> None:
         self.sync_service.start() 
