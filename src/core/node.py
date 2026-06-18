@@ -1,5 +1,7 @@
+import os
 import time
 import threading
+
 from core.file_monitor import FileMonitor
 from network.discovery import DiscoveryService
 from network.sync_service import SyncService
@@ -11,7 +13,7 @@ class Node:
 
         self.discovery = DiscoveryService(self.node_id)
         self.monitor = FileMonitor(self.sync_dir, self.node_id)
-        self.sync_service = SyncService(self.sync_dir, self.node_id)
+        self.sync_service = SyncService(self.sync_dir, self.node_id, self.monitor)
         self.discovery.has_new_peer = self._on_peer_discovered
         self.monitor.on_file_changed = self._on_file_changed
 
@@ -20,15 +22,18 @@ class Node:
         self.sync_service.sync_with_peer(peer_id, peer_ip)
 
     def _on_file_changed(self, filename: str) -> None:
-        print(f"[{self.node_id}] _on_file_changed disparado para o arquivo: {filename}")
+        filepath = os.path.join(self.sync_dir, filename)
 
-        peers_descobertos = self.discovery.peers
-        print(
-            f"[{self.node_id}] Peers conhecidos no momento do envio: {list(peers_descobertos.keys())}")  # <--- ADICIONE ESTE PRINT
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
 
-        for peer_id, info in peers_descobertos.items():
+        if "<<<<<<< SUAS ALTERAÇÕES LOCAIS" in content:
+            print(f"[{self.node_id}] Não é possível compartilhar suas alterações do arquivo '{filename}'. Resolva os conflitos manualmente entrando no container e editando o arquivo.")
+            return
+
+        peers = self.discovery.peers
+        for peer_id, info in peers.items():
             peer_ip = info["ip"]
-            print(f"[{self.node_id}] Enviando para {peer_id} no IP {peer_ip}")  # <--- ADICIONE ESTE PRINT
 
             threading.Thread(
                 target=self.sync_service.spread_modifications,
@@ -41,7 +46,7 @@ class Node:
         self.discovery.start()
         self.monitor.start()
 
-        print(f"[{self.node_id}] em operação. Aguardando eventos...\n")
+        print(f"[{self.node_id}] iniciado e em operação.\n")
 
     def stop(self) -> None:
         print(f"\n[{self.node_id}] encerrando atividades")
