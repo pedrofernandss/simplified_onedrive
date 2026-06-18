@@ -8,11 +8,12 @@ import threading
 from utils.merge import create_merge_conflits_marks
 
 class SyncService:
-    def __init__(self, sync_dir: str, node_id: str):
+    def __init__(self, sync_dir: str, node_id: str, monitor):
         self.sync_dir = sync_dir
         self.node_id = node_id
         self.tcp_port = 8888
         self.running = True
+        self.monitor = monitor
 
     def _recv_exactly(self, sock: socket.socket, n: int) -> bytes | None:
         """Recebe exatamente `n` bytes do socket."""
@@ -127,21 +128,34 @@ class SyncService:
                         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                             local_content = f.read()
 
-                        hash_local = hashlib.sha256(local_content.encode('utf-8')).hexdigest()
+                        local_hash = hashlib.sha256(local_content.encode('utf-8')).hexdigest()
 
-                        if hash_local != expected_hash:
-                            print(f"[{self.node_id}] Atenção! Os arquivos '{filename}' estão em conflito!")
+                        if local_hash != expected_hash:
+                            print(f"[{self.node_id}] Alterações rejeitadas. Conflito detectado em '{filename}'.")
                             merged_text = create_merge_conflits_marks(local_content, remote_content)
+                            merged_bytes = merged_text.encode('utf-8')
 
-                            with open(filepath, "w", encoding="utf-8") as f:
-                                f.write(merged_text)
+                            ans = {
+                                "status": "conflict",
+                                "filename": filename,
+                                "size": len(merged_bytes)
+                            }
+                            ans_json = json.dumps(ans).encode('utf-8')
 
-                            print(f"[{self.node_id}] Marcas de conflito inseridas em '{filename}'.")
+                            conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+                            conn.sendall(merged_bytes)
                             return
+
+                    self.monitor.ignore_next_scan.add(filename)
 
                     with open(filepath, "wb") as f:
                         f.write(content)
-                    print(f"[{self.node_id}] - Arquivo {filename} atualizado com sucesso.")
+
+                    ans = {"status": "success"}
+                    ans_json = json.dumps(ans).encode('utf-8')
+                    conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+
+                    print(f"[{self.node_id}] Arquivo {filename} atualizado com sucesso.")
 
         except Exception as e:
             print(f"[{self.node_id}] Erro ao atender conexão de {addr}: {e}")
@@ -181,7 +195,7 @@ class SyncService:
             sock.close()
 
             if not response or response.get("action") != "list_response":
-                print(f"[{self.node_id}] Resposta inválida de {peer_id}")
+                print(f"[{self.node_id}] ans inválida de {peer_id}")
                 return
 
             remote_files = response.get("files", {})
@@ -269,8 +283,29 @@ class SyncService:
             }
 
             self._send_message(sock, header, content)
+
+            resp_size_bytes = sock.recv(4)
+            if resp_size_bytes:
+                resp_size = int.from_bytes(resp_size_bytes, byteorder='big')
+                resp_json_bytes = sock.recv(resp_size)
+
+                ans = json.loads(resp_json_bytes.decode('utf-8'))
+                status = ans.get("status")
+
+                if status == "conflict":
+                    print(f"[{self.node_id}] Alterações rejeitados pelo peer {peer_ip}!")
+
+                    conflict_size = ans.get("size")
+                    conflict_content = self._recv_exactly(sock, conflict_size)
+
+                    with open(filepath, "wb") as f:
+                        f.write(conflict_content)
+
+                    print(f"[{self.node_id}] Conflito detectado no arquivo '{filename}'. Realize as correções de conflito e tente novamente.")
+
+                elif status == "success":
+                    print(f"[{self.node_id}] - Arquivo '{filename}' compartilhado com sucesso com peer {peer_ip}")
             sock.close()
-            print(f"[{self.node_id}] - Arquivo '{filename}' enviado com sucesso para o IP {peer_ip}")
 
         except Exception as e:
             print(f"[{self.node_id}] Falha ao enviar '{filename}' para {peer_ip}: {e}")
