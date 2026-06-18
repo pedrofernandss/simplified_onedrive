@@ -17,6 +17,7 @@ class FileMonitor:
         self.files_state = {}
         self.running = True
         self.on_file_changed = None
+        self.ignore_next_scan = set()
 
         if not os.path.exists(self.sync_dir):
             os.makedirs(self.sync_dir)
@@ -55,7 +56,11 @@ class FileMonitor:
                         'deleted': False
                     }
 
-                    print(f"ATENÇÃO! O arquivo {relative_path} foi detectado/alterado pelo [{self.node_id}]")
+                    if relative_path in self.ignore_next_scan:
+                        self.ignore_next_scan.remove(relative_path)
+                        continue
+
+                    print(f"O arquivo {relative_path} foi detectado/alterado pelo [{self.node_id}]")
 
                     if self.on_file_changed:
                         self.on_file_changed(relative_path)
@@ -66,7 +71,7 @@ class FileMonitor:
 
                     now = time.time()
                     self.files_state[relative_path]['updated_at'] = now
-                    print(f"Arquivo {relative_path} pelo [{self.node_id}]")
+                    print(f"Arquivo {relative_path} deletado pelo [{self.node_id}]")
 
     def loop(self) -> None:
         while self.running:
