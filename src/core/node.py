@@ -5,6 +5,7 @@ import threading
 from core.file_monitor import FileMonitor
 from network.discovery import DiscoveryService
 from network.sync_service import SyncService
+from utils.merge import has_merge_conflict_marks
 
 class Node:
     def __init__(self, sync_dir: str, node_id: str):
@@ -25,11 +26,13 @@ class Node:
         filepath = os.path.join(self.sync_dir, filename)
 
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
+            content = f.read()
 
-        if "<<<<<<< SUAS ALTERAÇÕES LOCAIS" in content:
+        if has_merge_conflict_marks(content):
             print(f"[{self.node_id}] Não é possível compartilhar suas alterações do arquivo '{filename}'. Resolva os conflitos manualmente entrando no container e editando o arquivo.")
             return
+
+        force_overwrite = self.monitor.consume_force_overwrite_after_resolution(filename)
 
         peers = self.discovery.peers
         for peer_id, info in peers.items():
@@ -37,7 +40,7 @@ class Node:
 
             threading.Thread(
                 target=self.sync_service.spread_modifications,
-                args=(peer_ip, filename),
+                args=(peer_ip, filename, force_overwrite),
                 daemon=True
             ).start()
 

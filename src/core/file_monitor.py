@@ -2,7 +2,7 @@ import os
 import time
 import hashlib
 import threading
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Callable
 
 class FileMetadata(TypedDict):
     hash: Optional[str]
@@ -18,6 +18,8 @@ class FileMonitor:
         self.running = True
         self.on_file_changed = None
         self.ignore_next_scan = set()
+        self.force_overwrite_after_resolution = set()
+        self._state_lock = threading.Lock()
 
         if not os.path.exists(self.sync_dir):
             os.makedirs(self.sync_dir)
@@ -32,6 +34,21 @@ class FileMonitor:
             return sha256_hash.hexdigest()
         except FileNotFoundError:
             return None
+
+    def mark_force_overwrite_after_resolution(self, relative_path: str) -> None:
+        with self._state_lock:
+            self.force_overwrite_after_resolution.add(relative_path)
+
+    def consume_force_overwrite_after_resolution(self, relative_path: str) -> bool:
+        with self._state_lock:
+            if relative_path in self.force_overwrite_after_resolution:
+                self.force_overwrite_after_resolution.remove(relative_path)
+                return True
+            return False
+
+    def has_pending_force_overwrite(self, relative_path: str) -> bool:
+        with self._state_lock:
+            return relative_path in self.force_overwrite_after_resolution
 
     def scan_directory(self) -> None:
         current_files = set()
