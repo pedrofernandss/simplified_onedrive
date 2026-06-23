@@ -90,6 +90,9 @@ class FileMonitor:
                     self.files_state[relative_path]['updated_at'] = now
                     print(f"Arquivo {relative_path} deletado pelo [{self.node_id}]")
 
+                    if self.on_file_changed:
+                        self.on_file_changed(relative_path)
+
     def loop(self) -> None:
         while self.running:
             self.scan_directory()

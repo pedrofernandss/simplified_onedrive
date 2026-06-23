@@ -25,6 +25,17 @@ class Node:
     def _on_file_changed(self, filename: str) -> None:
         filepath = os.path.join(self.sync_dir, filename)
 
+        if not os.path.exists(filepath):
+            peers = self.discovery.peers
+            for peer_id, info in peers.items():
+                peer_ip = info["ip"]
+                threading.Thread(
+                    target=self.sync_service.spread_deletion,
+                    args=(peer_ip, filename),
+                    daemon=True
+                ).start()
+            return
+
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 

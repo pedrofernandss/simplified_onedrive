@@ -245,6 +245,19 @@ class SyncService:
 
                     print(f"[{self.node_id}] Arquivo {filename} atualizado com sucesso.")
 
+            elif action == "delete":
+                filename_raw = header.get("filename")
+                if not filename_raw or not isinstance(filename_raw, str):
+                    return
+                filename = cast(str, filename_raw)
+                
+                filepath = os.path.join(self.sync_dir, filename)
+                
+                if os.path.exists(filepath):
+                    self.monitor.ignore_next_scan.add(filename)
+                    os.remove(filepath)
+                    print(f"[{self.node_id}] Arquivo {filename} apagado remotamente.")
+
         except Exception as e:
             print(f"[{self.node_id}] Erro ao atender conexão de {addr}: {e}")
         finally:
@@ -355,7 +368,7 @@ class SyncService:
 
             received_hash = hashlib.sha256(content).hexdigest()
             if received_hash != expected_hash:
-                print(f"[{self.node_id}] ⚠️  Hash incorreto para {filename}! Descartando.")
+                print(f"[{self.node_id}]  Hash incorreto para {filename}! Descartado.")
                 return
 
             filepath = os.path.join(self.sync_dir, filename)
@@ -364,7 +377,7 @@ class SyncService:
             with open(filepath, "wb") as f:
                 f.write(content)
 
-            print(f"[{self.node_id}] ✅ Arquivo recebido: {filename} ({file_size} bytes)")
+            print(f"[{self.node_id}] Arquivo recebido: {filename} ({file_size} bytes)")
 
         except Exception as e:
             print(f"[{self.node_id}] Erro ao baixar {filename}: {e}")
@@ -456,6 +469,23 @@ class SyncService:
 
         except Exception as e:
             print(f"[{self.node_id}] Falha ao enviar '{filename}' para {peer_ip}: {e}")
+
+    def spread_deletion(self, peer_ip: str, filename: str) -> None:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((peer_ip, self.tcp_port))
+
+            header = {
+                "action": "delete",
+                "filename": filename,
+                "node_id": self.node_id
+            }
+
+            self._send_message(sock, header)
+            sock.close()
+            print(f"[{self.node_id}] Comando de exclusão do arquivo '{filename}' enviado para {peer_ip}")
+        except Exception as e:
+            print(f"[{self.node_id}] Falha ao enviar exclusão de '{filename}' para {peer_ip}: {e}")
 
     def start(self) -> None:
         threading.Thread(target=self._tcp_server, daemon=True).start()
