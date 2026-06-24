@@ -6,12 +6,14 @@ import hashlib
 import threading
 from typing import cast
 
+from core.terminal_ui import TerminalUI
 from utils.merge import create_merge_conflits_marks, has_merge_conflict_marks
 
 class SyncService:
-    def __init__(self, sync_dir: str, node_id: str, monitor):
+    def __init__(self, sync_dir: str, node_id: str, monitor, ui: TerminalUI | None = None):
         self.sync_dir = sync_dir
         self.node_id = node_id
+        self.ui = ui or TerminalUI(node_id)
         self.tcp_port = 8888
         self.running = True
         self.monitor = monitor
@@ -189,7 +191,7 @@ class SyncService:
                             ans_json = json.dumps(ans).encode('utf-8')
                             conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
 
-                            print(f"[{self.node_id}] Arquivo {filename} sobrescrito com sucesso.")
+                            self.ui.success("FILE", f"Arquivo sobrescrito com sucesso: {filename}")
                             return
 
                         if local_hash != expected_hash:
@@ -197,7 +199,7 @@ class SyncService:
                             merged_bytes = merged_text.encode('utf-8')
 
                             if has_merge_conflict_marks(merged_text):
-                                print(f"[{self.node_id}] Conflito detectado em '{filename}'.")
+                                self.ui.warning("SYNC", f"Conflito detectado em '{filename}'.")
 
                                 ans = {
                                     "status": "conflict",
@@ -219,7 +221,7 @@ class SyncService:
                                 ans = {"status": "success"}
                                 ans_json = json.dumps(ans).encode('utf-8')
                                 conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
-                                print(f"[{self.node_id}] Merge automático aplicado em '{filename}'.")
+                                self.ui.success("SYNC", f"Merge automático aplicado em '{filename}'.")
                                 return
 
                             ans = {
@@ -231,7 +233,7 @@ class SyncService:
 
                             conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
                             conn.sendall(merged_bytes)
-                            print(f"[{self.node_id}] Merge automático aplicado em '{filename}'.")
+                            self.ui.success("SYNC", f"Merge automático aplicado em '{filename}'.")
                             return
 
                     self.monitor.ignore_next_scan.add(filename)
@@ -243,10 +245,10 @@ class SyncService:
                     ans_json = json.dumps(ans).encode('utf-8')
                     conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
 
-                    print(f"[{self.node_id}] Arquivo {filename} atualizado com sucesso.")
+                    self.ui.success("FILE", f"Arquivo atualizado com sucesso: {filename}")
 
         except Exception as e:
-            print(f"[{self.node_id}] Erro ao atender conexão de {addr}: {e}")
+            self.ui.error("SYNC", f"Erro ao atender conexão de {addr}: {e}")
         finally:
             conn.close()
 
@@ -257,7 +259,7 @@ class SyncService:
         server.bind(("", self.tcp_port))
         server.listen(5)
 
-        print(f"[{self.node_id}] Servidor TCP ouvindo na porta {self.tcp_port}")
+        self.ui.sync(f"Servidor TCP ouvindo na porta {self.tcp_port}")
 
         while self.running:
             try:
@@ -273,7 +275,7 @@ class SyncService:
     def sync_with_peer(self, peer_id: str, peer_ip: str) -> None:
         """Conecta no peer, compara catálogos e baixa arquivos ausentes."""
         try:
-            print(f"\n[{self.node_id}] Iniciando sincronização com {peer_id} ({peer_ip})...")
+            self.ui.sync(f"Iniciando sincronização com {peer_id} ({peer_ip})...")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5.0)
             sock.connect((peer_ip, self.tcp_port))
@@ -283,13 +285,13 @@ class SyncService:
             sock.close()
 
             if not response or response.get("action") != "list_response":
-                print(f"[{self.node_id}] ans inválida de {peer_id}")
+                self.ui.error("SYNC", f"Resposta inválida de {peer_id}")
                 return
 
             remote_files_raw = response.get("files", {})
             remote_files = self._normalize_remote_files(remote_files_raw)
             if remote_files is None:
-                print(f"[{self.node_id}] Catálogo remoto inválido vindo de {peer_id}")
+                self.ui.error("SYNC", f"Catálogo remoto inválido vindo de {peer_id}")
                 return
             local_files = self._get_local_files()
 
@@ -300,18 +302,18 @@ class SyncService:
                     files_to_download.append(filename)
 
             if not files_to_download:
-                print(f"[{self.node_id}] Já está sincronizado com {peer_id}")
+                self.ui.success("SYNC", f"Já está sincronizado com {peer_id}")
                 return
 
-            print(f"[{self.node_id}] {len(files_to_download)} arquivo(s) para baixar de {peer_id}")
+            self.ui.down(f"{len(files_to_download)} arquivo(s) para baixar de {peer_id}")
 
             for filename in files_to_download:
                 self._download_file(peer_id, peer_ip, filename)
 
-            print(f"[{self.node_id}] Sincronização com {peer_id} concluída!\n")
+            self.ui.success("SYNC", f"Sincronização com {peer_id} concluída!")
 
         except Exception as e:
-            print(f"[{self.node_id}] Erro na sincronização com {peer_id}: {e}")
+            self.ui.error("SYNC", f"Erro na sincronização com {peer_id}: {e}")
 
     def _download_file(self, peer_id: str, peer_ip: str, filename: str) -> None:
         """Baixa um único arquivo de um peer via TCP."""
@@ -324,23 +326,23 @@ class SyncService:
             response = self._recv_message(sock)
 
             if not response or "action" not in response or response["action"] != "get_response":
-                print(f"[{self.node_id}] Falha ao baixar {filename} de {peer_id}")
+                self.ui.error("DOWN", f"Falha ao baixar {filename} de {peer_id}")
                 sock.close()
                 return
 
             if "size" not in response or "hash" not in response:
-                print(f"[{self.node_id}] Resposta inválida para {filename} de {peer_id}")
+                self.ui.error("DOWN", f"Resposta inválida para {filename} de {peer_id}")
                 return
 
             file_size_raw = response["size"]
             expected_hash_raw = response["hash"]
 
             if not isinstance(file_size_raw, int) or file_size_raw < 0:
-                print(f"[{self.node_id}] Resposta inválida para {filename} de {peer_id}")
+                self.ui.error("DOWN", f"Resposta inválida para {filename} de {peer_id}")
                 return
 
             if not isinstance(expected_hash_raw, str):
-                print(f"[{self.node_id}] Hash inválido recebido para {filename} de {peer_id}")
+                self.ui.error("DOWN", f"Hash inválido recebido para {filename} de {peer_id}")
                 return
 
             file_size = cast(int, file_size_raw)
@@ -350,12 +352,12 @@ class SyncService:
             sock.close()
 
             if not content:
-                print(f"[{self.node_id}] Conteúdo vazio para {filename}")
+                self.ui.warning("DOWN", f"Conteúdo vazio para {filename}")
                 return
 
             received_hash = hashlib.sha256(content).hexdigest()
             if received_hash != expected_hash:
-                print(f"[{self.node_id}] ⚠️  Hash incorreto para {filename}! Descartando.")
+                self.ui.error("DOWN", f"Hash incorreto para {filename}! Descartando.")
                 return
 
             filepath = os.path.join(self.sync_dir, filename)
@@ -364,10 +366,10 @@ class SyncService:
             with open(filepath, "wb") as f:
                 f.write(content)
 
-            print(f"[{self.node_id}] ✅ Arquivo recebido: {filename} ({file_size} bytes)")
+            self.ui.success("DOWN", f"Arquivo recebido: {filename} ({file_size} bytes)")
 
         except Exception as e:
-            print(f"[{self.node_id}] Erro ao baixar {filename}: {e}")
+            self.ui.error("DOWN", f"Erro ao baixar {filename}: {e}")
 
     def spread_modifications(self, peer_ip: str, filename: str, force: bool = False) -> None:
         try:
@@ -408,7 +410,7 @@ class SyncService:
                 status = ans.get("status")
 
                 if status == "conflict":
-                    print(f"[{self.node_id}] Alterações rejeitados pelo peer {peer_ip}!")
+                    self.ui.warning("SYNC", f"Alterações rejeitadas pelo peer {peer_ip}!")
 
                     conflict_size = ans.get("size")
                     if not isinstance(conflict_size, int):
@@ -426,7 +428,11 @@ class SyncService:
 
                     self.monitor.mark_force_overwrite_after_resolution(filename)
 
-                    print(f"[{self.node_id}] Conflito detectado no arquivo '{filename}'. Realize as correções de conflito e tente novamente.")
+                    self.ui.warning(
+                        "SYNC",
+                        f"Conflito detectado no arquivo '{filename}'. "
+                        "Realize as correções de conflito e tente novamente."
+                    )
 
                 elif status == "merged":
                     merged_size = ans.get("size")
@@ -445,17 +451,17 @@ class SyncService:
                     with open(filepath, "wb") as f:
                         f.write(merged_content)
 
-                    print(f"[{self.node_id}] Merge automático aplicado ao arquivo '{filename}'.")
+                    self.ui.success("SYNC", f"Merge automático aplicado ao arquivo '{filename}'.")
 
                 elif status == "success":
                     if force:
-                        print(f"[{self.node_id}] - Arquivo '{filename}' sobrescrito com sucesso em peer {peer_ip}")
+                        self.ui.success("FILE", f"Arquivo '{filename}' sobrescrito com sucesso em peer {peer_ip}")
                     else:
-                        print(f"[{self.node_id}] - Arquivo '{filename}' compartilhado com sucesso com peer {peer_ip}")
+                        self.ui.success("FILE", f"Arquivo '{filename}' compartilhado com sucesso com peer {peer_ip}")
             sock.close()
 
         except Exception as e:
-            print(f"[{self.node_id}] Falha ao enviar '{filename}' para {peer_ip}: {e}")
+            self.ui.error("SYNC", f"Falha ao enviar '{filename}' para {peer_ip}: {e}")
 
     def start(self) -> None:
         threading.Thread(target=self._tcp_server, daemon=True).start()

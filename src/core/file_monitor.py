@@ -2,7 +2,9 @@ import os
 import time
 import hashlib
 import threading
-from typing import TypedDict, Optional, Callable
+from typing import TypedDict, Optional
+
+from core.terminal_ui import TerminalUI
 
 class FileMetadata(TypedDict):
     hash: Optional[str]
@@ -11,9 +13,10 @@ class FileMetadata(TypedDict):
     deleted: bool
 
 class FileMonitor:
-    def __init__(self, sync_dir: str, node_id: str):
+    def __init__(self, sync_dir: str, node_id: str, ui: TerminalUI | None = None):
         self.sync_dir = sync_dir
         self.node_id = node_id
+        self.ui = ui or TerminalUI(node_id)
         self.files_state = {}
         self.running = True
         self.on_file_changed = None
@@ -77,7 +80,7 @@ class FileMonitor:
                         self.ignore_next_scan.remove(relative_path)
                         continue
 
-                    print(f"O arquivo {relative_path} foi detectado/alterado pelo [{self.node_id}]")
+                    self.ui.file(f"Arquivo detectado/alterado: {relative_path}")
 
                     if self.on_file_changed:
                         self.on_file_changed(relative_path)
@@ -88,7 +91,7 @@ class FileMonitor:
 
                     now = time.time()
                     self.files_state[relative_path]['updated_at'] = now
-                    print(f"Arquivo {relative_path} deletado pelo [{self.node_id}]")
+                    self.ui.file(f"Arquivo deletado: {relative_path}")
 
     def loop(self) -> None:
         while self.running:
