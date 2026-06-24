@@ -39,9 +39,14 @@ simplified_onedrive/
 └── src/
     ├── main.py             # Ponto de entrada da aplicação
     ├── core/
-    │   └── node.py         # Classe principal (Composição de serviços do Nó)
-    └── network/
-        └── discovery.py    # Implementação do protocolo de descoberta P2P
+    │   ├── node.py         # Classe principal (Composição de serviços do Nó)
+    │   ├── file_monitor.py # Monitoramento de alterações nos diretórios sincronizados
+    │   └── terminal_ui.py  # Padronização visual dos logs no terminal
+    ├── network/
+    │   ├── discovery.py    # Implementação do protocolo de descoberta P2P
+    │   └── sync_service.py # Comunicação TCP e sincronização entre pares
+    └── utils/
+        └── merge.py        # Apoio à resolução de conflitos
 ```
 
 ## 4. Instruções de Execução
@@ -56,8 +61,8 @@ O sistema é executado em um ambiente isolado através do Docker, o que permite 
 
 **Passo 1: Clonar o repositório**
 ```bash
-git clone [https://github.com/pedrofernandss/simplified_onedrive.git](https://github.com/pedrofernandss/simplified_onedrive.git)
-cd simplified-onedrive
+git clone https://github.com/pedrofernandss/simplified_onedrive.git
+cd simplified_onedrive
 ```
 
 **Passo 2: Iniciar a topologia base**
@@ -67,6 +72,11 @@ docker compose up node_a node_b --build
 ```
 *Nota: O terminal apresentará os logs da inicialização, demonstrando a descoberta mútua via protocolo UDP.*
 
+Para reduzir os logs do processo de build e manter o terminal mais focado na aplicação, também é possível executar:
+```bash
+docker compose up node_a node_b --build --quiet-build --remove-orphans
+```
+
 **Passo 3: Testar a escalabilidade dinâmica**
 Para verificar a capacidade de integração em tempo real, abra uma nova janela de terminal no mesmo diretório e inicie um terceiro nó:
 ```bash
@@ -74,8 +84,39 @@ docker compose up node_c
 ```
 *Nota: O Nó C emitirá um pacote de anúncio (broadcast), sendo imediatamente reconhecido e integrado pelos Nós A e B em suas tabelas de pares.*
 
+**Passo 4: Testar a sincronização de arquivos**
+Com os nós em execução, crie um arquivo em um dos contêineres:
+```bash
+docker compose exec node_a sh -c "echo 'arquivo criado no node_a' > /app/documents/teste_a.txt"
+```
+
+Em seguida, verifique se o arquivo foi replicado para os demais nós:
+```bash
+docker compose exec node_b cat /app/documents/teste_a.txt
+docker compose exec node_c cat /app/documents/teste_a.txt
+```
+
+Também é possível alterar o arquivo em outro nó para observar a propagação da modificação:
+```bash
+docker compose exec node_b sh -c "echo 'alterado pelo node_b' >> /app/documents/teste_a.txt"
+docker compose exec node_a cat /app/documents/teste_a.txt
+```
+
 **Passo 5: Encerrar o sistema**
 Para terminar a execução e remover os recursos temporários de rede, utilize o comando:
 ```bash
 docker compose down
 ```
+
+
+## 5. Identificação do Trabalho
+
+**Trabalho 2:** Mini-One Drive  
+**Disciplina:** CIC0124 Redes de Computadores
+
+### Autores
+
+* Felipe Lauterjung Caselli - 24/1032401
+* Laíssa Beatriz Soares da Silva - 22/2032982
+* Marcio Vinicius da Silva Guimaraes - 24/2001553
+* Pedro Fernandes de Oliveira - 23/1006177
