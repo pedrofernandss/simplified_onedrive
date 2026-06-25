@@ -43,6 +43,7 @@ class Node:
             print(f"[{self.node_id}] Não é possível compartilhar suas alterações do arquivo '{filename}'. Resolva os conflitos manualmente entrando no container e editando o arquivo.")
             return
 
+        previous_hash = self.monitor.consume_previous_hash(filename)
         force_overwrite = self.monitor.consume_force_overwrite_after_resolution(filename)
 
         peers = self.discovery.peers
@@ -51,7 +52,7 @@ class Node:
 
             threading.Thread(
                 target=self.sync_service.spread_modifications,
-                args=(peer_ip, filename, force_overwrite),
+                args=(peer_ip, filename, force_overwrite, previous_hash),
                 daemon=True
             ).start()
 

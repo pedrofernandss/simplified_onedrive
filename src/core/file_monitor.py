@@ -19,6 +19,7 @@ class FileMonitor:
         self.on_file_changed = None
         self.ignore_next_scan = set()
         self.force_overwrite_after_resolution = set()
+        self.previous_hashes: dict[str, str | None] = {}
         self._state_lock = threading.Lock()
 
         if not os.path.exists(self.sync_dir):
@@ -50,6 +51,9 @@ class FileMonitor:
         with self._state_lock:
             return relative_path in self.force_overwrite_after_resolution
 
+    def consume_previous_hash(self, relative_path: str) -> str | None:
+        return self.previous_hashes.pop(relative_path, None)
+
     def scan_directory(self) -> None:
         current_files = set()
 
@@ -66,6 +70,11 @@ class FileMonitor:
                 file_timestamp = os.path.getmtime(filepath)
 
                 if relative_path not in self.files_state or self.files_state[relative_path]['hash'] != file_hash:
+                    previous_hash = None
+                    if relative_path in self.files_state:
+                        previous_hash = self.files_state[relative_path]['hash']
+                    self.previous_hashes[relative_path] = previous_hash
+
                     self.files_state[relative_path] = {
                         'hash': file_hash,
                         'size': os.path.getsize(filepath),

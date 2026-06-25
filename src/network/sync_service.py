@@ -17,7 +17,6 @@ class SyncService:
         self.monitor = monitor
 
     def _recv_exactly(self, sock: socket.socket, n: int) -> bytes | None:
-        """Recebe exatamente `n` bytes do socket."""
         data = b""
         while len(data) < n:
             chunk = sock.recv(n - len(data))
@@ -27,7 +26,6 @@ class SyncService:
         return data
 
     def _send_message(self, sock: socket.socket, header: dict[str, object], payload: bytes = b"") -> None:
-        """Envia header JSON com prefixo de tamanho (4 bytes big-endian) + payload opcional."""
         header_bytes = json.dumps(header).encode("utf-8")
         sock.sendall(struct.pack("!I", len(header_bytes)))
         sock.sendall(header_bytes)
@@ -35,7 +33,6 @@ class SyncService:
             sock.sendall(payload)
 
     def _recv_message(self, sock: socket.socket) -> dict[str, object] | None:
-        """Recebe header JSON com prefixo de tamanho. Retorna o dict parseado."""
         raw_len = self._recv_exactly(sock, 4)
         if not raw_len:
             return None
@@ -47,7 +44,6 @@ class SyncService:
 
 
     def _get_file_hash(self, filepath: str) -> str | None:
-        """Calcula SHA-256 do arquivo em blocos de 64 KB."""
         sha256 = hashlib.sha256()
         try:
             with open(filepath, "rb") as f:
@@ -58,7 +54,6 @@ class SyncService:
             return None
 
     def _get_local_files(self) -> dict:
-        """Retorna dicionário {caminho_relativo: {"hash": ..., "size": ...}} dos arquivos locais."""
         files = {}
         for root, _, filenames in os.walk(self.sync_dir):
             for fname in filenames:
@@ -81,7 +76,6 @@ class SyncService:
     #  SERVIDOR TCP
 
     def _handle_client(self, conn: socket.socket, addr: tuple) -> None:
-        """Trata uma conexão TCP recebida. Suporta ações LIST e GET."""
         try:
             header = self._recv_message(conn)
             if not header:
@@ -178,6 +172,7 @@ class SyncService:
                             local_content = f.read()
 
                         local_hash = hashlib.sha256(local_content.encode('utf-8')).hexdigest()
+                        previous_hash = header.get("previous_hash")
 
                         if force:
                             self.monitor.ignore_next_scan.add(filename)
@@ -190,6 +185,32 @@ class SyncService:
                             conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
 
                             print(f"[{self.node_id}] Arquivo {filename} sobrescrito com sucesso.")
+                            return
+
+                        if previous_hash is not None and local_hash == previous_hash:
+                            self.monitor.ignore_next_scan.add(filename)
+
+                            with open(filepath, "wb") as f:
+                                f.write(content)
+
+                            ans = {"status": "success"}
+                            ans_json = json.dumps(ans).encode('utf-8')
+                            conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+
+                            print(f"[{self.node_id}] Arquivo {filename} atualizado com sucesso.")
+                            return
+
+                        if previous_hash is None:
+                            self.monitor.ignore_next_scan.add(filename)
+
+                            with open(filepath, "wb") as f:
+                                f.write(content)
+
+                            ans = {"status": "success"}
+                            ans_json = json.dumps(ans).encode('utf-8')
+                            conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+
+                            print(f"[{self.node_id}] Arquivo {filename} atualizado com sucesso.")
                             return
 
                         if local_hash != expected_hash:
@@ -284,7 +305,6 @@ class SyncService:
     #  CLIENTE TCP — Sincronização inicial
 
     def sync_with_peer(self, peer_id: str, peer_ip: str) -> None:
-        """Conecta no peer, compara catálogos e baixa arquivos ausentes."""
         try:
             print(f"\n[{self.node_id}] Iniciando sincronização com {peer_id} ({peer_ip})...")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -327,7 +347,6 @@ class SyncService:
             print(f"[{self.node_id}] Erro na sincronização com {peer_id}: {e}")
 
     def _download_file(self, peer_id: str, peer_ip: str, filename: str) -> None:
-        """Baixa um único arquivo de um peer via TCP."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(10.0)
@@ -382,7 +401,7 @@ class SyncService:
         except Exception as e:
             print(f"[{self.node_id}] Erro ao baixar {filename}: {e}")
 
-    def spread_modifications(self, peer_ip: str, filename: str, force: bool = False) -> None:
+    def spread_modifications(self, peer_ip: str, filename: str, force: bool = False, previous_hash: str | None = None) -> None:
         try:
             filepath = os.path.join(self.sync_dir, filename)
 
@@ -401,6 +420,7 @@ class SyncService:
                 "action": "push",
                 "filename": filename,
                 "hash": file_hash,
+                "previous_hash": previous_hash,
                 "size": file_size,
                 "node_id": self.node_id,
                 "force": force
