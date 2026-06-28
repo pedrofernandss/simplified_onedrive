@@ -1,122 +1,159 @@
 # One Drive Simplificado
 
-Este projeto consiste em um sistema de sincronização de arquivos distribuído, em uma arquitetura Peer-to-Peer (P2P). Foi desenvolvido com foco na alta disponibilidade, tolerância a falhas e resolução descentralizada de conflitos. 
+Sistema de sincronização de arquivos distribuído em arquitetura Peer-to-Peer (P2P), desenvolvido como trabalho da disciplina de Redes de Computadores. O projeto usa sockets UDP e TCP para simular uma rede local de nós que descobrem uns aos outros automaticamente e mantêm diretórios sincronizados.
 
-O sistema foi construído como estudo de caso para a disciplina de Redes de Computadores, aplicando de forma prática conceitos de comunicação em rede com a construção de Socket's.
+## Visão Geral
 
-## 1. Visão Geral do Sistema
+Cada nó executa três serviços principais:
 
-O Mini-OneDrive emula o comportamento de plataformas modernas de armazenamento em nuvem, substituindo a tradicional arquitetura Cliente-Servidor por uma rede 100% descentralizada. A topologia permite que qualquer nó integre ou abandone a rede de forma dinâmica, garantindo que a sincronização dos dados entre os pares ocorra de forma autônoma.
+- **Descoberta de peers via UDP broadcast:** os nós anunciam sua presença na rede e mantêm uma tabela de peers ativos.
+- **Monitoramento do diretório local:** alterações, criações e exclusões em `/app/documents` são detectadas periodicamente.
+- **Sincronização via TCP:** arquivos são listados, baixados, enviados, atualizados ou removidos entre os peers.
 
-### Principais Funcionalidades
+Quando um novo nó entra na rede, ele consulta os arquivos disponíveis nos peers já conhecidos e baixa os arquivos ausentes ou divergentes. Depois disso, mudanças locais são propagadas para os demais nós.
 
-* **Descoberta Dinâmica (UDP Broadcast):** Detecção automática de nós na rede local (LAN), operando sem a necessidade de um servidor centralizado de registros ou da configuração manual de endereços IP.
-* **Tolerância a Falhas (Heartbeat):** Mecanismo de monitoramento contínuo do estado da rede. Em caso de desconexão abrupta de um nó, o sistema detecta a ausência por limite de tempo (*timeout*) e atualiza a topologia em tempo real.
-* **Monitoramento do Sistema de Arquivos:** Registro e acompanhamento dinâmico das operações de criação, modificação e exclusão de arquivos nos diretórios locais designados.
-* **Resolução de Conflitos (Relógios Vetoriais - Em desenvolvimento):** Implementação de controle de causalidade para gerenciar edições simultâneas *offline*, prevenindo a perda de dados através da criação de versões de conflito.
-* **Sincronização Delta (TCP - Em desenvolvimento):** Protocolo de transferência otimizada de dados, baseado na segmentação de arquivos (*chunks*) e na verificação de integridade através de algoritmos de *hash* (SHA-256).
+## Funcionalidades
 
-## 2. Tecnologias Utilizadas
+- Descoberta automática de nós na rede local com UDP broadcast.
+- Heartbeat simples para detectar nós desconectados por timeout.
+- Sincronização inicial entre peers ao descobrir um novo nó.
+- Propagação de arquivos criados ou modificados.
+- Propagação de exclusões.
+- Verificação de integridade com hash SHA-256.
+- Detecção de conflitos com base no hash anterior do arquivo.
+- Merge textual automático quando possível.
+- Marcação de conflitos no arquivo quando a resolução automática não é segura.
+- Logs padronizados no terminal com horário, nó, categoria e severidade.
 
-A arquitetura do projeto priorizou a minimização de dependências externas, recorrendo exclusivamente aos recursos nativos da linguagem para a lógica principal:
+## Tecnologias
 
-* **Linguagem de Programação:** Python 3.11 (Uso das bibliotecas padrão: `socket`, `threading`, `json`, `hashlib`, `os`).
-* **Ambiente e Virtualização:** Docker e Docker Compose.
-* **Protocolos de Comunicação:** UDP (Gestão de topologia e descoberta) e TCP (Transferência confiável de dados).
+- Python 3.11
+- Docker e Docker Compose
+- UDP para descoberta de peers
+- TCP para transferência e comandos de sincronização
+- Bibliotecas padrão do Python: `socket`, `threading`, `json`, `hashlib`, `os`, `difflib`
 
-## 3. Estrutura do Projeto
-
-A organização dos diretórios reflete a separação entre a infraestrutura de execução, os dados persistentes e a lógica de domínio:
+## Estrutura do Projeto
 
 ```text
 simplified_onedrive/
-├── docker-compose.yml      # Configuração da orquestração dos contêineres
-├── Dockerfile              # Definição da imagem base da aplicação
-├── documents/              # Diretórios locais mapeados para sincronização
+├── Dockerfile
+├── docker-compose.yml
+├── README.md
+├── documents/
 │   ├── documents_node_a/
 │   ├── documents_node_b/
-│   └── documents_node_c/
+│   ├── documents_node_c/
+│   └── documents_node_d/
 └── src/
-    ├── main.py             # Ponto de entrada da aplicação
+    ├── main.py
     ├── core/
-    │   ├── node.py         # Classe principal (Composição de serviços do Nó)
-    │   ├── file_monitor.py # Monitoramento de alterações nos diretórios sincronizados
-    │   └── terminal_ui.py  # Padronização visual dos logs no terminal
+    │   ├── file_monitor.py
+    │   ├── node.py
+    │   └── terminal_ui.py
     ├── network/
-    │   ├── discovery.py    # Implementação do protocolo de descoberta P2P
-    │   └── sync_service.py # Comunicação TCP e sincronização entre pares
+    │   ├── discovery.py
+    │   └── sync_service.py
     └── utils/
-        └── merge.py        # Apoio à resolução de conflitos
+        └── merge.py
 ```
 
-## 4. Instruções de Execução
+## Como Executar
 
-O sistema é executado em um ambiente isolado através do Docker, o que permite a simulação de uma rede composta por múltiplos dispositivos na mesma máquina.
+Pré-requisitos:
 
-### Pré-requisitos
-* Docker instalado no sistema *host*.
-* Docker Compose configurado.
+- Docker instalado
+- Docker Compose instalado
 
-### Procedimento de Inicialização
+Suba dois nós:
 
-**Passo 1: Clonar o repositório**
-```bash
-git clone https://github.com/pedrofernandss/simplified_onedrive.git
-cd simplified_onedrive
-```
-
-**Passo 2: Iniciar a topologia base**
-Para instanciar os dois primeiros nós e estabelecer a rede primária, execute:
 ```bash
 docker compose up node_a node_b --build
 ```
-*Nota: O terminal apresentará os logs da inicialização, demonstrando a descoberta mútua via protocolo UDP.*
 
-Para reduzir os logs do processo de build e manter o terminal mais focado na aplicação, também é possível executar:
+Para deixar os logs mais limpos, sem o prefixo do container:
+
 ```bash
-docker compose up node_a node_b --build --quiet-build --remove-orphans
+docker compose up node_a node_b --build --no-log-prefix
 ```
 
-**Passo 3: Testar a escalabilidade dinâmica**
-Para verificar a capacidade de integração em tempo real, abra uma nova janela de terminal no mesmo diretório e inicie um terceiro nó:
-```bash
-docker compose up node_c
-```
-*Nota: O Nó C emitirá um pacote de anúncio (broadcast), sendo imediatamente reconhecido e integrado pelos Nós A e B em suas tabelas de pares.*
+Em outro terminal, adicione um terceiro nó:
 
-**Passo 4: Testar a sincronização de arquivos**
-Com os nós em execução, crie um arquivo em um dos contêineres:
+```bash
+docker compose up node_c --no-log-prefix
+```
+
+Também existe um quarto nó configurado:
+
+```bash
+docker compose up node_d --no-log-prefix
+```
+
+Para encerrar a rede:
+
+```bash
+docker compose down
+```
+
+## Testes Manuais
+
+Com os nós em execução, crie um arquivo no `node_a`:
+
 ```bash
 docker compose exec node_a sh -c "echo 'arquivo criado no node_a' > /app/documents/teste_a.txt"
 ```
 
-Em seguida, verifique se o arquivo foi replicado para os demais nós:
+Verifique se ele foi replicado:
+
 ```bash
 docker compose exec node_b cat /app/documents/teste_a.txt
 docker compose exec node_c cat /app/documents/teste_a.txt
 ```
 
-Também é possível alterar o arquivo em outro nó para observar a propagação da modificação:
+Altere o arquivo a partir de outro nó:
+
 ```bash
 docker compose exec node_b sh -c "echo 'alterado pelo node_b' >> /app/documents/teste_a.txt"
 docker compose exec node_a cat /app/documents/teste_a.txt
 ```
 
-**Passo 5: Encerrar o sistema**
-Para terminar a execução e remover os recursos temporários de rede, utilize o comando:
+Teste a exclusão:
+
 ```bash
-docker compose down
+docker compose exec node_a rm /app/documents/teste_a.txt
+docker compose exec node_b ls /app/documents
 ```
 
+## Conflitos
 
-## 5. Identificação do Trabalho
+O sistema usa o hash anterior do arquivo para decidir se uma alteração remota pode sobrescrever a versão local com segurança.
+
+Quando dois nós alteram o mesmo arquivo de formas incompatíveis, o conteúdo pode receber marcadores de conflito. Eles seguem o formato abaixo, com linhas de início, separação e fim envolvendo as versões em disputa:
+
+```text
+[inicio: ALTERACOES DA REDE]
++ conteudo recebido de outro no
+[separador]
+- conteudo local
+[fim: SUAS ALTERACOES LOCAIS]
+```
+
+Depois de resolver manualmente o arquivo e remover os marcadores, uma nova alteração local pode ser propagada aos peers.
+
+## Observações
+
+- A sincronização atual envia arquivos inteiros, não deltas por chunks.
+- A resolução de conflitos atual é baseada em hashes e merge textual, não em relógios vetoriais.
+- O sistema foi pensado para simulação em rede Docker local.
+
+## Identificação do Trabalho
 
 **Trabalho 2:** Mini-One Drive  
 **Disciplina:** CIC0124 Redes de Computadores
 
 ### Autores
 
-* Felipe Lauterjung Caselli - 24/1032401
-* Laíssa Beatriz Soares da Silva - 22/2032982
-* Marcio Vinicius da Silva Guimaraes - 24/2001553
-* Pedro Fernandes de Oliveira - 23/1006177
+- Felipe Lauterjung Caselli - 24/1032401
+- Laíssa Beatriz Soares da Silva - 22/2032982
+- Marcio Vinicius da Silva Guimaraes - 24/2001553
+- Pedro Fernandes de Oliveira - 23/1006177
