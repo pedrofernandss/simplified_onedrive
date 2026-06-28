@@ -3,20 +3,23 @@ import time
 import socket
 import threading
 
+from core.terminal_ui import TerminalUI
+
 class DiscoveryService:
-    def __init__(self, node_id):
+    def __init__(self, node_id, ui: TerminalUI | None = None):
         self.node_id = node_id
+        self.ui = ui or TerminalUI(node_id)
         self.udp_port = 9999
         self.peers = {}
         self.timeout = 5
         self.running = True
-        self.has_new_peer = None 
+        self.has_new_peer = None
 
     def listen_for_peers(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(('', self.udp_port))
 
-        print(f"[{self.node_id}] ouvindo a rede UDP na porta {self.udp_port}")
+        self.ui.discover(f"Ouvindo a rede UDP na porta {self.udp_port}")
 
         while self.running:
             try:
@@ -30,7 +33,7 @@ class DiscoveryService:
                     new_peer = peer_id not in self.peers
 
                     if new_peer:
-                        print(f"[{self.node_id}] [+] Novo nó descoberto: {peer_id} no IP {addr[0]}")
+                        self.ui.discover(f"Novo nó descoberto: {peer_id} no IP {addr[0]}")
 
                     self.peers[peer_id] = {
                         "ip": addr[0],
@@ -54,7 +57,7 @@ class DiscoveryService:
 
             for peer_id in unplugged_nodes:
                 del self.peers[peer_id]
-                print(f"[{self.node_id}] [-] Nó desconectado: {peer_id}")
+                self.ui.warning("DISCOVER", f"Nó desconectado: {peer_id}")
 
             time.sleep(2)
 

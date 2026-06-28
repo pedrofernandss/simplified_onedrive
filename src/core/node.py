@@ -3,6 +3,7 @@ import time
 import threading
 
 from core.file_monitor import FileMonitor
+from core.terminal_ui import TerminalUI
 from network.discovery import DiscoveryService
 from network.sync_service import SyncService
 from utils.merge import has_merge_conflict_marks
@@ -11,10 +12,11 @@ class Node:
     def __init__(self, sync_dir: str, node_id: str):
         self.node_id = node_id
         self.sync_dir = sync_dir
+        self.ui = TerminalUI(self.node_id)
 
-        self.discovery = DiscoveryService(self.node_id)
-        self.monitor = FileMonitor(self.sync_dir, self.node_id)
-        self.sync_service = SyncService(self.sync_dir, self.node_id, self.monitor)
+        self.discovery = DiscoveryService(self.node_id, self.ui)
+        self.monitor = FileMonitor(self.sync_dir, self.node_id, self.ui)
+        self.sync_service = SyncService(self.sync_dir, self.node_id, self.monitor, self.ui)
         self.discovery.has_new_peer = self._on_peer_discovered
         self.monitor.on_file_changed = self._on_file_changed
 
@@ -40,7 +42,11 @@ class Node:
             content = f.read()
 
         if has_merge_conflict_marks(content):
-            print(f"[{self.node_id}] Não é possível compartilhar suas alterações do arquivo '{filename}'. Resolva os conflitos manualmente entrando no container e editando o arquivo.")
+            self.ui.warning(
+                "SYNC",
+                f"Não é possível compartilhar suas alterações do arquivo '{filename}'. "
+                "Resolva os conflitos manualmente entrando no container e editando o arquivo."
+            )
             return
 
         previous_hash = self.monitor.consume_previous_hash(filename)
@@ -57,14 +63,14 @@ class Node:
             ).start()
 
     def start(self) -> None:
-        self.sync_service.start() 
+        self.sync_service.start()
         self.discovery.start()
         self.monitor.start()
 
-        print(f"[{self.node_id}] iniciado e em operação.\n")
+        self.ui.start("iniciado e em operação.")
 
     def stop(self) -> None:
-        print(f"\n[{self.node_id}] encerrando atividades")
+        self.ui.stop("encerrando atividades")
         self.discovery.running = False
         self.monitor.running = False
         self.sync_service.running = False
