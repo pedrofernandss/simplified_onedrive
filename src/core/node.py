@@ -27,6 +27,17 @@ class Node:
     def _on_file_changed(self, filename: str) -> None:
         filepath = os.path.join(self.sync_dir, filename)
 
+        if not os.path.exists(filepath):
+            peers = self.discovery.peers
+            for peer_id, info in peers.items():
+                peer_ip = info["ip"]
+                threading.Thread(
+                    target=self.sync_service.spread_deletion,
+                    args=(peer_ip, filename),
+                    daemon=True
+                ).start()
+            return
+
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
@@ -38,6 +49,7 @@ class Node:
             )
             return
 
+        previous_hash = self.monitor.consume_previous_hash(filename)
         force_overwrite = self.monitor.consume_force_overwrite_after_resolution(filename)
 
         peers = self.discovery.peers
@@ -46,7 +58,7 @@ class Node:
 
             threading.Thread(
                 target=self.sync_service.spread_modifications,
-                args=(peer_ip, filename, force_overwrite),
+                args=(peer_ip, filename, force_overwrite, previous_hash),
                 daemon=True
             ).start()
 

@@ -13,7 +13,7 @@ class DiscoveryService:
         self.peers = {}
         self.timeout = 5
         self.running = True
-        self.has_new_peer = None 
+        self.has_new_peer = None
 
     def listen_for_peers(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

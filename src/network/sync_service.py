@@ -83,7 +83,7 @@ class SyncService:
     #  SERVIDOR TCP
 
     def _handle_client(self, conn: socket.socket, addr: tuple) -> None:
-        """Trata uma conexão TCP recebida. Suporta ações LIST e GET."""
+        """Trata uma conexão TCP recebida. Suporta ações LIST, GET, PUSH e DELETE."""
         try:
             header = self._recv_message(conn)
             if not header:
@@ -180,6 +180,7 @@ class SyncService:
                             local_content = f.read()
 
                         local_hash = hashlib.sha256(local_content.encode('utf-8')).hexdigest()
+                        previous_hash = header.get("previous_hash")
 
                         if force:
                             self.monitor.ignore_next_scan.add(filename)
@@ -192,6 +193,32 @@ class SyncService:
                             conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
 
                             self.ui.success("FILE", f"Arquivo sobrescrito com sucesso: {filename}")
+                            return
+
+                        if previous_hash is not None and local_hash == previous_hash:
+                            self.monitor.ignore_next_scan.add(filename)
+
+                            with open(filepath, "wb") as f:
+                                f.write(content)
+
+                            ans = {"status": "success"}
+                            ans_json = json.dumps(ans).encode('utf-8')
+                            conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+
+                            self.ui.success("FILE", f"Arquivo atualizado com sucesso: {filename}")
+                            return
+
+                        if previous_hash is None:
+                            self.monitor.ignore_next_scan.add(filename)
+
+                            with open(filepath, "wb") as f:
+                                f.write(content)
+
+                            ans = {"status": "success"}
+                            ans_json = json.dumps(ans).encode('utf-8')
+                            conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
+
+                            self.ui.success("FILE", f"Arquivo atualizado com sucesso: {filename}")
                             return
 
                         if local_hash != expected_hash:
@@ -246,6 +273,19 @@ class SyncService:
                     conn.sendall(len(ans_json).to_bytes(4, byteorder='big') + ans_json)
 
                     self.ui.success("FILE", f"Arquivo atualizado com sucesso: {filename}")
+
+            elif action == "delete":
+                filename_raw = header.get("filename")
+                if not filename_raw or not isinstance(filename_raw, str):
+                    return
+                filename = cast(str, filename_raw)
+
+                filepath = os.path.join(self.sync_dir, filename)
+
+                if os.path.exists(filepath):
+                    self.monitor.ignore_next_scan.add(filename)
+                    os.remove(filepath)
+                    self.ui.success("FILE", f"Arquivo apagado remotamente: {filename}")
 
         except Exception as e:
             self.ui.error("SYNC", f"Erro ao atender conexão de {addr}: {e}")
@@ -371,7 +411,7 @@ class SyncService:
         except Exception as e:
             self.ui.error("DOWN", f"Erro ao baixar {filename}: {e}")
 
-    def spread_modifications(self, peer_ip: str, filename: str, force: bool = False) -> None:
+    def spread_modifications(self, peer_ip: str, filename: str, force: bool = False, previous_hash: str | None = None) -> None:
         try:
             filepath = os.path.join(self.sync_dir, filename)
 
@@ -390,6 +430,7 @@ class SyncService:
                 "action": "push",
                 "filename": filename,
                 "hash": file_hash,
+                "previous_hash": previous_hash,
                 "size": file_size,
                 "node_id": self.node_id,
                 "force": force
@@ -462,6 +503,23 @@ class SyncService:
 
         except Exception as e:
             self.ui.error("SYNC", f"Falha ao enviar '{filename}' para {peer_ip}: {e}")
+
+    def spread_deletion(self, peer_ip: str, filename: str) -> None:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((peer_ip, self.tcp_port))
+
+            header = {
+                "action": "delete",
+                "filename": filename,
+                "node_id": self.node_id
+            }
+
+            self._send_message(sock, header)
+            sock.close()
+            self.ui.success("FILE", f"Comando de exclusão do arquivo '{filename}' enviado para {peer_ip}")
+        except Exception as e:
+            self.ui.error("SYNC", f"Falha ao enviar exclusão de '{filename}' para {peer_ip}: {e}")
 
     def start(self) -> None:
         threading.Thread(target=self._tcp_server, daemon=True).start()
